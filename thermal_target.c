@@ -59,6 +59,7 @@ static struct therm_msm_soc_type msm_soc_table[] = {
     {THERM_SDM_710, 336},
     {THERM_SDM_710, 337},
     {THERM_SDM_710, 393}, // This SOC ID is for SDM712
+    {THERM_SDM_710, 371},
     {THERM_QCS_605, 347},
     {THERM_SDM_632, 349},
     {THERM_SDM_632, 350},
@@ -80,13 +81,22 @@ static struct therm_msm_soc_type msm_soc_table[] = {
     {THERM_MSM_8917, 386}, // This SOC ID is for QM215
     {THERM_MSM_8917, 436}, // This SOC ID is for QCM2150
     {THERM_TRINKET,  394},
+    {THERM_TRINKET,  467}, // This SOC ID is for QCM6125
+    {THERM_TRINKET,  468}, // This SOC ID is for QCS6125
     {THERM_LITO,  400},
+    {THERM_LITO,  440},
     {THERM_ATOLL,  407},
+    {THERM_ATOLL,  443}, // This SOC ID is for SM7125
     {THERM_BENGAL,  417},
     {THERM_BENGAL,  444},
     {THERM_BENGAL,  445},
     {THERM_BENGAL,  420},
+    {THERM_BENGAL,  469}, // This SOC ID is for QCM4290
+    {THERM_BENGAL,  470}, // This SOC ID is for QCS4290
     {THERM_LAGOON,  434},
+    {THERM_SCUBA,  441},
+    {THERM_SCUBA,  473}, // This SoC Id is for Agatti IOT QCM2290
+    {THERM_SCUBA,  474}, // This SoC Id is for Agatti IOT QCS2290
 };
 
 static char *gen_sensors_list[] =
@@ -329,6 +339,45 @@ static struct target_therm_cfg sensor_cfg_bengal[] = {
     }
 };
 
+static char *cpu_sensors_scuba[] =
+{
+    "cpuss-0-usr",
+    "cpuss-1-usr",
+    "cpuss-0-usr",
+    "cpuss-1-usr",
+};
+
+static struct target_therm_cfg sensor_cfg_scuba[] = {
+    {
+        .type = DEVICE_TEMPERATURE_CPU,
+        .sensor_list = cpu_sensors_scuba,
+        .sens_cnt = ARRAY_SIZE(cpu_sensors_scuba),
+        .mult = 0.001,
+    },
+    {
+        .type = DEVICE_TEMPERATURE_GPU,
+        .sensor_list = &misc_sensors_bengal[0],
+        .sens_cnt = 1,
+        .mult = 0.001,
+        .label = "GPU",
+    },
+    {
+        .type = DEVICE_TEMPERATURE_BATTERY,
+        .sensor_list = &misc_sensors_bengal[1],
+        .sens_cnt = 1,
+        .mult = 0.001,
+        .label = "battery",
+    },
+    {
+        .type = DEVICE_TEMPERATURE_SKIN,
+        .sensor_list = &misc_sensors_bengal[2],
+        .sens_cnt = 1,
+        .mult = 0.001,
+        .label = "skin",
+    }
+};
+
+
 static char *cpu_sensors_msmnile[] =
 {
     "cpu-0-0-usr",
@@ -384,12 +433,19 @@ static struct target_therm_cfg sensor_cfg_kona[] = {
         .sensor_list = cpu_sensors_msmnile,
         .sens_cnt = ARRAY_SIZE(cpu_sensors_msmnile),
         .mult = 0.001,
+        .throt_thresh = 95,
+        .shutdwn_thresh = 115,
+        .vr_thresh = 95,
+        .label = "CPU",
     },
     {
         .type = DEVICE_TEMPERATURE_GPU,
         .sensor_list = &gen_sensors_list[0],
         .sens_cnt = 1,
         .mult = 0.001,
+        .throt_thresh = 95,
+        .shutdwn_thresh = 115,
+        .vr_thresh = 95,
         .label = "GPU",
     },
     {
@@ -397,6 +453,9 @@ static struct target_therm_cfg sensor_cfg_kona[] = {
         .sensor_list = &gen_sensors_list[1],
         .sens_cnt = 1,
         .mult = 0.001,
+        .throt_thresh = 45,
+        .shutdwn_thresh = 95,
+        .vr_thresh = 45,
         .label = "battery",
     },
     {
@@ -404,6 +463,9 @@ static struct target_therm_cfg sensor_cfg_kona[] = {
         .sensor_list = &gen_sensors_list[2],
         .sens_cnt = 1,
         .mult = 0.001,
+        .throt_thresh = 60,
+        .shutdwn_thresh = 95,
+        .vr_thresh = 60,
         .label = "skin",
     }
 };
@@ -574,12 +636,19 @@ static struct target_therm_cfg sensor_cfg_710[] = {
         .sensor_list = cpu_sensors_710,
         .sens_cnt = ARRAY_SIZE(cpu_sensors_710),
         .mult = 0.001,
+        .throt_thresh = 95,
+        .shutdwn_thresh = 115,
+        .vr_thresh = 95,
+        .label = "CPU",
     },
     {
         .type = DEVICE_TEMPERATURE_GPU,
         .sensor_list = &misc_sensors_710[0],
         .sens_cnt = 1,
         .mult = 0.001,
+        .throt_thresh = 95,
+        .shutdwn_thresh = 115,
+        .vr_thresh = 95,
         .label = "GPU",
     },
     {
@@ -587,6 +656,9 @@ static struct target_therm_cfg sensor_cfg_710[] = {
         .sensor_list = &misc_sensors_710[1],
         .sens_cnt = 1,
         .mult = 0.001,
+        .throt_thresh = 45,
+        .shutdwn_thresh = 95,
+        .vr_thresh = 45,
         .label = "battery",
     },
     {
@@ -594,6 +666,9 @@ static struct target_therm_cfg sensor_cfg_710[] = {
         .sensor_list = &misc_sensors_710[2],
         .sens_cnt = 1,
         .mult = 0.001,
+        .throt_thresh = 60,
+        .shutdwn_thresh = 95,
+        .vr_thresh = 60,
         .label = "skin",
     }
 };
@@ -843,6 +918,10 @@ ssize_t get_temperatures(thermal_module_t *module, temperature_t *list, size_t s
             case THERM_BENGAL:
                 cfg = sensor_cfg_bengal;
                 num_cfg = ARRAY_SIZE(sensor_cfg_bengal);
+                break;
+            case THERM_SCUBA:
+                cfg = sensor_cfg_scuba;
+                num_cfg = ARRAY_SIZE(sensor_cfg_scuba);
                 break;
             case THERM_LITO:
             case THERM_ATOLL:
