@@ -16,32 +16,30 @@
  * limitations under the License.
  */
 
-
 #define LOG_TAG "ThermalHAL-8998"
-#include <utils/Log.h>
-
 #include <hardware/hardware.h>
 #include <hardware/thermal.h>
+#include <utils/Log.h>
+
 #include "thermal_common.h"
 
 static char *cpu_sensors_8998[] =
-{
-    "tsens_tz_sensor1",
-    "tsens_tz_sensor2",
-    "tsens_tz_sensor3",
-    "tsens_tz_sensor4",
-    "tsens_tz_sensor7",
-    "tsens_tz_sensor8",
-    "tsens_tz_sensor9",
-    "tsens_tz_sensor10",
+    {
+        "tsens_tz_sensor1",
+        "tsens_tz_sensor2",
+        "tsens_tz_sensor3",
+        "tsens_tz_sensor4",
+        "tsens_tz_sensor7",
+        "tsens_tz_sensor8",
+        "tsens_tz_sensor9",
+        "tsens_tz_sensor10",
 };
 
 static char *misc_sensors_8998[] =
-{
-    "tsens_tz_sensor12",
-    "battery",
-    "quiet_therm"
-};
+    {
+        "tsens_tz_sensor12",
+        "battery",
+        "quiet_therm"};
 
 static struct target_therm_cfg sensor_cfg_8998[] = {
     {
@@ -76,25 +74,24 @@ static struct target_therm_cfg sensor_cfg_8998[] = {
         .shutdwn_thresh = 70,
         .vr_thresh = 58,
         .label = "skin",
-    }
-};
+    }};
 
 ssize_t get_temperatures(thermal_module_t *module, temperature_t *list, size_t size) {
-    ALOGD("Entering %s",__func__);
-    static int thermal_sens_size;
+  ALOGD("Entering %s", __func__);
+  static int thermal_sens_size;
 
-    if (!thermal_sens_size) {
-        thermal_sens_size = thermal_zone_init(sensor_cfg_8998,
-                                ARRAY_SIZE(sensor_cfg_8998));
-        if (thermal_sens_size <= 0) {
-            ALOGE("thermal sensor initialization is failed\n");
-            thermal_sens_size = 0;
-            return 0;
-        }
+  if (!thermal_sens_size) {
+    thermal_sens_size = thermal_zone_init(sensor_cfg_8998,
+                                          ARRAY_SIZE(sensor_cfg_8998));
+    if (thermal_sens_size <= 0) {
+      ALOGE("thermal sensor initialization is failed\n");
+      thermal_sens_size = 0;
+      return 0;
     }
+  }
 
-    if (list == NULL)
-        return thermal_sens_size;
+  if (list == NULL)
+    return thermal_sens_size;
 
-    return get_temperature_for_all(list, size);
+  return get_temperature_for_all(list, size);
 }

@@ -16,27 +16,27 @@
  * limitations under the License.
  */
 
+#include <dirent.h>
 #include <errno.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
-#include <dirent.h>
+#include <unistd.h>
 
 #define LOG_TAG "ThermalHAL-UTIL"
-#include <utils/Log.h>
-
 #include <hardware/hardware.h>
 #include <hardware/thermal.h>
+#include <utils/Log.h>
+
 #include "thermal_common.h"
 
-#define MAX_LENGTH    50
-#define MAX_PATH      (256)
-#define CPU_LABEL      "CPU%d"
-#define THERMAL_SYSFS  "/sys/devices/virtual/thermal"
-#define TZ_DIR_NAME    "thermal_zone"
-#define TZ_DIR_FMT     "thermal_zone%d"
+#define MAX_LENGTH 50
+#define MAX_PATH (256)
+#define CPU_LABEL "CPU%d"
+#define THERMAL_SYSFS "/sys/devices/virtual/thermal"
+#define TZ_DIR_NAME "thermal_zone"
+#define TZ_DIR_FMT "thermal_zone%d"
 #define THERMAL_TYPE "/sys/devices/virtual/thermal/%s/type"
-#define TEMPERATURE_FILE_FORMAT  "/sys/class/thermal/thermal_zone%d/temp"
+#define TEMPERATURE_FILE_FORMAT "/sys/class/thermal/thermal_zone%d/temp"
 
 static char **cpu_label;
 static struct vendor_temperature *sensors;
@@ -48,14 +48,14 @@ static unsigned int sensor_cnt;
  * @return number of cpus on success or 0 on error.
  */
 size_t get_num_cpus() {
-    static int ncpus;
+  static int ncpus;
 
-    if (!ncpus) {
-        ncpus = (int)sysconf(_SC_NPROCESSORS_CONF);
-        if (ncpus < 1)
-            ALOGE("%s: Error retrieving number of cores", __func__);
-    }
-    return ncpus;
+  if (!ncpus) {
+    ncpus = (int)sysconf(_SC_NPROCESSORS_CONF);
+    if (ncpus < 1)
+      ALOGE("%s: Error retrieving number of cores", __func__);
+  }
+  return ncpus;
 }
 
 /**
@@ -66,23 +66,23 @@ size_t get_num_cpus() {
  * @return cpu label string on success or NULL on error.
  */
 const char *get_cpu_label(unsigned int cpu_num) {
-    unsigned int cpu = 0;
+  unsigned int cpu = 0;
 
-    if (cpu_label == NULL) {
-        cpu_label= (char**)calloc(get_num_cpus(), sizeof(char *));
-	if (!cpu_label)
-		return NULL;
-	for(cpu = 0; cpu < get_num_cpus(); cpu++) {
-            cpu_label[cpu] = (char *)calloc(sizeof("CPUN"), sizeof(char));
-            if(!cpu_label[cpu])
-                return NULL;
-            snprintf(cpu_label[cpu], sizeof("CPUN"), CPU_LABEL, cpu);
-	}
-    }
-    if(cpu_num >= get_num_cpus())
+  if (cpu_label == NULL) {
+    cpu_label = (char **)calloc(get_num_cpus(), sizeof(char *));
+    if (!cpu_label)
+      return NULL;
+    for (cpu = 0; cpu < get_num_cpus(); cpu++) {
+      cpu_label[cpu] = (char *)calloc(sizeof("CPUN"), sizeof(char));
+      if (!cpu_label[cpu])
         return NULL;
+      snprintf(cpu_label[cpu], sizeof("CPUN"), CPU_LABEL, cpu);
+    }
+  }
+  if (cpu_num >= get_num_cpus())
+    return NULL;
 
-    return cpu_label[cpu_num];
+  return cpu_label[cpu_num];
 }
 
 /**
@@ -94,26 +94,25 @@ const char *get_cpu_label(unsigned int cpu_num) {
  *
  * @return number of bytes read on success or negative value on error.
  */
-int read_line_from_file(const char *path, char *buf, size_t count)
-{
-    char * fgets_ret;
-    FILE * fd;
-    int rv;
+int read_line_from_file(const char *path, char *buf, size_t count) {
+  char *fgets_ret;
+  FILE *fd;
+  int rv;
 
-    fd = fopen(path, "r");
-    if (fd == NULL)
-        return -1;
+  fd = fopen(path, "r");
+  if (fd == NULL)
+    return -1;
 
-    fgets_ret = fgets(buf, (int)count, fd);
-    if (NULL != fgets_ret) {
-        rv = (int)strlen(buf);
-    } else {
-        rv = ferror(fd);
-    }
+  fgets_ret = fgets(buf, (int)count, fd);
+  if (NULL != fgets_ret) {
+    rv = (int)strlen(buf);
+  } else {
+    rv = ferror(fd);
+  }
 
-    fclose(fd);
+  fclose(fd);
 
-    return rv;
+  return rv;
 }
 
 /**
@@ -123,81 +122,80 @@ int read_line_from_file(const char *path, char *buf, size_t count)
  *
  * @return positive integer on success or negative value on error.
  */
-static int get_tzn(const char *sensor_name)
-{
-    DIR *tdir = NULL;
-    struct dirent *tdirent = NULL;
-    int found = -1;
-    int tzn = 0;
-    char name[MAX_PATH] = {0};
-    char cwd[MAX_PATH] = {0};
-    int ret = 0;
+static int get_tzn(const char *sensor_name) {
+  DIR *tdir = NULL;
+  struct dirent *tdirent = NULL;
+  int found = -1;
+  int tzn = 0;
+  char name[MAX_PATH] = {0};
+  char cwd[MAX_PATH] = {0};
+  int ret = 0;
 
-    if (!getcwd(cwd, sizeof(cwd)))
-        return found;
-
-    /* Change dir to read the entries. Doesnt work otherwise */
-    ret = chdir(THERMAL_SYSFS);
-    if (ret) {
-        ALOGE("Unable to change to %s\n", THERMAL_SYSFS);
-        return found;
-    }
-    tdir = opendir(THERMAL_SYSFS);
-    if (!tdir) {
-        ALOGE("Unable to open %s\n", THERMAL_SYSFS);
-        return found;
-    }
-
-    while ((tdirent = readdir(tdir))) {
-        char buf[50];
-        struct dirent *tzdirent;
-        DIR *tzdir = NULL;
-
-        if (strncmp(tdirent->d_name, TZ_DIR_NAME,
-            strlen(TZ_DIR_NAME)) != 0)
-            continue;
-
-        tzdir = opendir(tdirent->d_name);
-        if (!tzdir)
-            continue;
-        while ((tzdirent = readdir(tzdir))) {
-            if (strcmp(tzdirent->d_name, "type"))
-                continue;
-            snprintf(name, MAX_PATH, THERMAL_TYPE,
-                    tdirent->d_name);
-            ret = read_line_from_file(name, buf, sizeof(buf));
-            if (ret <= 0) {
-                ALOGE("%s: sensor name read error for tz:%s\n",
-                        __func__, tdirent->d_name);
-                break;
-            }
-            if (buf[ret - 1] == '\n')
-                buf[ret - 1] = '\0';
-            else
-                buf[ret] = '\0';
-
-            if (!strcmp(buf, sensor_name)) {
-                found = 1;
-		break;
-            }
-        }
-        closedir(tzdir);
-        if (found == 1)
-            break;
-    }
-
-    if (found == 1) {
-        sscanf(tdirent->d_name, TZ_DIR_FMT, &tzn);
-        ALOGD("Sensor %s found at tz: %d\n",
-                sensor_name, tzn);
-        found = tzn;
-    }
-
-    closedir(tdir);
-    /* Restore current working dir */
-    ret = chdir(cwd);
-
+  if (!getcwd(cwd, sizeof(cwd)))
     return found;
+
+  /* Change dir to read the entries. Doesnt work otherwise */
+  ret = chdir(THERMAL_SYSFS);
+  if (ret) {
+    ALOGE("Unable to change to %s\n", THERMAL_SYSFS);
+    return found;
+  }
+  tdir = opendir(THERMAL_SYSFS);
+  if (!tdir) {
+    ALOGE("Unable to open %s\n", THERMAL_SYSFS);
+    return found;
+  }
+
+  while ((tdirent = readdir(tdir))) {
+    char buf[50];
+    struct dirent *tzdirent;
+    DIR *tzdir = NULL;
+
+    if (strncmp(tdirent->d_name, TZ_DIR_NAME,
+                strlen(TZ_DIR_NAME)) != 0)
+      continue;
+
+    tzdir = opendir(tdirent->d_name);
+    if (!tzdir)
+      continue;
+    while ((tzdirent = readdir(tzdir))) {
+      if (strcmp(tzdirent->d_name, "type"))
+        continue;
+      snprintf(name, MAX_PATH, THERMAL_TYPE,
+               tdirent->d_name);
+      ret = read_line_from_file(name, buf, sizeof(buf));
+      if (ret <= 0) {
+        ALOGE("%s: sensor name read error for tz:%s\n",
+              __func__, tdirent->d_name);
+        break;
+      }
+      if (buf[ret - 1] == '\n')
+        buf[ret - 1] = '\0';
+      else
+        buf[ret] = '\0';
+
+      if (!strcmp(buf, sensor_name)) {
+        found = 1;
+        break;
+      }
+    }
+    closedir(tzdir);
+    if (found == 1)
+      break;
+  }
+
+  if (found == 1) {
+    sscanf(tdirent->d_name, TZ_DIR_FMT, &tzn);
+    ALOGD("Sensor %s found at tz: %d\n",
+          sensor_name, tzn);
+    found = tzn;
+  }
+
+  closedir(tdir);
+  /* Restore current working dir */
+  ret = chdir(cwd);
+
+  return found;
 }
 
 /**
@@ -211,46 +209,45 @@ static int get_tzn(const char *sensor_name)
  * @return 0 on success or negative value -errno on error.
  */
 static int initialize_sensor(struct target_therm_cfg *v_sen_t,
-                               struct vendor_temperature *sensor,
-                               enum temperature_type type,
-                               int sens_idx)
-{
-    if (v_sen_t == NULL || sensor == NULL ||
-        sens_idx < 0) {
-         ALOGE("%s:Invalid input, sens_idx%d\n", __func__, sens_idx);
-         return -1;
-    }
+                             struct vendor_temperature *sensor,
+                             enum temperature_type type,
+                             int sens_idx) {
+  if (v_sen_t == NULL || sensor == NULL ||
+      sens_idx < 0) {
+    ALOGE("%s:Invalid input, sens_idx%d\n", __func__, sens_idx);
+    return -1;
+  }
 
-    sensor->tzn = get_tzn(v_sen_t->sensor_list[sens_idx]);
-    if (sensor->tzn < 0) {
-        ALOGE("No thermal zone for sensor: %s, ret:%d\n",
-               v_sen_t->sensor_list[sens_idx], sensor->tzn);
-        return -1;
-    }
-    if (type == DEVICE_TEMPERATURE_CPU)
-        sensor->t.name = get_cpu_label(sens_idx);
-    else
-        sensor->t.name = v_sen_t->label;
+  sensor->tzn = get_tzn(v_sen_t->sensor_list[sens_idx]);
+  if (sensor->tzn < 0) {
+    ALOGE("No thermal zone for sensor: %s, ret:%d\n",
+          v_sen_t->sensor_list[sens_idx], sensor->tzn);
+    return -1;
+  }
+  if (type == DEVICE_TEMPERATURE_CPU)
+    sensor->t.name = get_cpu_label(sens_idx);
+  else
+    sensor->t.name = v_sen_t->label;
 
-    sensor->t.type = v_sen_t->type;
-    sensor->mult = v_sen_t->mult;
+  sensor->t.type = v_sen_t->type;
+  sensor->mult = v_sen_t->mult;
 
-    if (v_sen_t->throt_thresh != 0)
-        sensor->t.throttling_threshold = v_sen_t->throt_thresh;
-    else
-        sensor->t.throttling_threshold = UNKNOWN_TEMPERATURE;
+  if (v_sen_t->throt_thresh != 0)
+    sensor->t.throttling_threshold = v_sen_t->throt_thresh;
+  else
+    sensor->t.throttling_threshold = UNKNOWN_TEMPERATURE;
 
-    if (v_sen_t->shutdwn_thresh != 0)
-        sensor->t.shutdown_threshold = v_sen_t->shutdwn_thresh;
-    else
-        sensor->t.shutdown_threshold = UNKNOWN_TEMPERATURE;
+  if (v_sen_t->shutdwn_thresh != 0)
+    sensor->t.shutdown_threshold = v_sen_t->shutdwn_thresh;
+  else
+    sensor->t.shutdown_threshold = UNKNOWN_TEMPERATURE;
 
-    if (v_sen_t->vr_thresh != 0)
-        sensor->t.vr_throttling_threshold = v_sen_t->vr_thresh;
-    else
-        sensor->t.vr_throttling_threshold = UNKNOWN_TEMPERATURE;
+  if (v_sen_t->vr_thresh != 0)
+    sensor->t.vr_throttling_threshold = v_sen_t->vr_thresh;
+  else
+    sensor->t.vr_throttling_threshold = UNKNOWN_TEMPERATURE;
 
-    return 0;
+  return 0;
 }
 
 /**
@@ -261,46 +258,47 @@ static int initialize_sensor(struct target_therm_cfg *v_sen_t,
  *
  * @return number of sensor on success or negative value or zero on error.
  */
-int thermal_zone_init(struct target_therm_cfg *v_sen_t, int cfg_cnt)
-{
-    unsigned int idx = 0, cpu = 0;
-    int j = 0;
+int thermal_zone_init(struct target_therm_cfg *v_sen_t, int cfg_cnt) {
+  unsigned int idx = 0, cpu = 0;
+  int j = 0;
 
-    if (sensors != NULL && sensor_cnt != 0)
-        return sensor_cnt;
-
-    if (v_sen_t == NULL || cfg_cnt == 0) {
-        ALOGE("%s:Invalid input\n", __func__);
-        return -1;
-    }
-    sensors = calloc(get_num_cpus() + cfg_cnt - 1,
-        sizeof(struct vendor_temperature));
-
-    for (j = 0, idx = 0; j < cfg_cnt &&
-                idx < (get_num_cpus() + cfg_cnt - 1); j++) {
-        if (v_sen_t[j].type == DEVICE_TEMPERATURE_CPU) {
-            /* Initialize cpu thermal zone id */
-            for (cpu = 0; cpu < get_num_cpus() &&
-                        idx < (get_num_cpus() + cfg_cnt - 1); cpu++, idx++) {
-                if (initialize_sensor(&v_sen_t[j], &sensors[idx],
-                      v_sen_t[j].type, cpu)) {
-                        free(sensors);
-                        return -1;
-                }
-           }
-        } else {
-            /* Initialize misc thermal zone id */
-            if (initialize_sensor(&v_sen_t[j], &sensors[idx],
-                  v_sen_t[j].type, 0)) {
-                free(sensors);
-                return -1;
-            }
-            idx++;
-       }
-    }
-    sensor_cnt = idx;
-
+  if (sensors != NULL && sensor_cnt != 0)
     return sensor_cnt;
+
+  if (v_sen_t == NULL || cfg_cnt == 0) {
+    ALOGE("%s:Invalid input\n", __func__);
+    return -1;
+  }
+  sensors = calloc(get_num_cpus() + cfg_cnt - 1,
+                   sizeof(struct vendor_temperature));
+
+  for (j = 0, idx = 0; j < cfg_cnt &&
+                       idx < (get_num_cpus() + cfg_cnt - 1);
+       j++) {
+    if (v_sen_t[j].type == DEVICE_TEMPERATURE_CPU) {
+      /* Initialize cpu thermal zone id */
+      for (cpu = 0; cpu < get_num_cpus() &&
+                    idx < (get_num_cpus() + cfg_cnt - 1);
+           cpu++, idx++) {
+        if (initialize_sensor(&v_sen_t[j], &sensors[idx],
+                              v_sen_t[j].type, cpu)) {
+          free(sensors);
+          return -1;
+        }
+      }
+    } else {
+      /* Initialize misc thermal zone id */
+      if (initialize_sensor(&v_sen_t[j], &sensors[idx],
+                            v_sen_t[j].type, 0)) {
+        free(sensors);
+        return -1;
+      }
+      idx++;
+    }
+  }
+  sensor_cnt = idx;
+
+  return sensor_cnt;
 }
 
 /**
@@ -318,33 +316,32 @@ int thermal_zone_init(struct target_therm_cfg *v_sen_t, int cfg_cnt)
  * @return 0 on success or negative value -errno on error.
  */
 static ssize_t read_temperature(int sensor_num, int type, const char *name,
-        float mult, float throttling_threshold, float shutdown_threshold,
-        float vr_throttling_threshold,
-        temperature_t *out) {
-    char file_name[MAX_LENGTH];
-    float temp;
-    char buf[16] = {0};
-    int ret = 0;
+                                float mult, float throttling_threshold, float shutdown_threshold,
+                                float vr_throttling_threshold,
+                                temperature_t *out) {
+  char file_name[MAX_LENGTH];
+  float temp;
+  char buf[16] = {0};
+  int ret = 0;
 
-    snprintf(file_name, sizeof(file_name), TEMPERATURE_FILE_FORMAT, sensor_num);
-    ret = read_line_from_file(file_name, buf, sizeof(buf));
-    if (ret <= 0) {
-        ALOGE("Temperature read error: %d for sensor[%d]:%s\n",
-            ret, sensor_num, name);
-	return -1;
-    }
-    temp = atof(buf);
+  snprintf(file_name, sizeof(file_name), TEMPERATURE_FILE_FORMAT, sensor_num);
+  ret = read_line_from_file(file_name, buf, sizeof(buf));
+  if (ret <= 0) {
+    ALOGE("Temperature read error: %d for sensor[%d]:%s\n",
+          ret, sensor_num, name);
+    return -1;
+  }
+  temp = atof(buf);
 
-    (*out) = (temperature_t) {
-        .type = type,
-        .name = name,
-        .current_value = temp * mult,
-        .throttling_threshold = throttling_threshold,
-        .shutdown_threshold = shutdown_threshold,
-        .vr_throttling_threshold = vr_throttling_threshold
-    };
+  (*out) = (temperature_t){
+      .type = type,
+      .name = name,
+      .current_value = temp * mult,
+      .throttling_threshold = throttling_threshold,
+      .shutdown_threshold = shutdown_threshold,
+      .vr_throttling_threshold = vr_throttling_threshold};
 
-    return 0;
+  return 0;
 }
 
 /**
@@ -357,25 +354,23 @@ static ssize_t read_temperature(int sensor_num, int type, const char *name,
  * @return number of sensor data filled on success or 0 or negative value
  *     -errno on error.
  */
-ssize_t get_temperature_for_all(temperature_t *list, size_t size)
-{
-    size_t idx;
+ssize_t get_temperature_for_all(temperature_t *list, size_t size) {
+  size_t idx;
 
-    if (sensors == NULL) {
-        ALOGE("No sensor configured\n");
-	return 0;
-    }
+  if (sensors == NULL) {
+    ALOGE("No sensor configured\n");
+    return 0;
+  }
 
-    for (idx = 0; idx < sensor_cnt && idx < size; idx++) {
-        ssize_t result = read_temperature(sensors[idx].tzn, sensors[idx].t.type,
-                sensors[idx].t.name, sensors[idx].mult,
-                sensors[idx].t.throttling_threshold,
-                sensors[idx].t.shutdown_threshold,
-                sensors[idx].t.vr_throttling_threshold,
-                &list[idx]);
-        if (result != 0)
-            return result;
-    }
-    return idx;
+  for (idx = 0; idx < sensor_cnt && idx < size; idx++) {
+    ssize_t result = read_temperature(sensors[idx].tzn, sensors[idx].t.type,
+                                      sensors[idx].t.name, sensors[idx].mult,
+                                      sensors[idx].t.throttling_threshold,
+                                      sensors[idx].t.shutdown_threshold,
+                                      sensors[idx].t.vr_throttling_threshold,
+                                      &list[idx]);
+    if (result != 0)
+      return result;
+  }
+  return idx;
 }
-
